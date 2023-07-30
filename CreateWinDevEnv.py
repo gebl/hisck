@@ -62,7 +62,7 @@ def createBaseInstanceQCOW2(qcow2, iname):
     6. We return the name of the new image to the caller. """
     process = subprocess.run(
         [
-            "qemu-img",
+            "/usr/bin/qemu-img",
             "create",
             "-b",
             qcow2,
@@ -88,7 +88,7 @@ def translateQCOW2(vmdk):
     qcow2 = vmdk[:-5] + ".qcow2"
     if not os.path.exists(qcow2):
         subprocess.run(
-            ["qemu-img", "convert", "-f", "vmdk", "-O", "qcow2", vmdk, qcow2]
+            ["/usr/bin/qemu-img", "convert", "-f", "vmdk", "-O", "qcow2", vmdk, qcow2]
         )
     return qcow2
 
@@ -187,6 +187,8 @@ def bootVM(domainxml, conn):
 
 
 def runFdisk(img):
+    """ Run and return the output of the fdisk command.
+    """
     cl = [
         "/usr/sbin/fdisk",
         "-l",
@@ -197,6 +199,7 @@ def runFdisk(img):
 
 
 def connectNBD(dev, img):
+    """Run and return the output of connecting the dev to /dev/nbd0"""
     cl = [
         "/usr/bin/qemu-nbd",
         "--connect=/dev/nbd0",
@@ -207,6 +210,7 @@ def connectNBD(dev, img):
 
 
 def disconnectNBD(dev):
+    """Run and retrun the output of disconnecting the dev from /dev/nbd0"""
     cl = [
         "/usr/bin/qemu-nbd",
         "--disconnect",
@@ -217,12 +221,13 @@ def disconnectNBD(dev):
 
 
 def mountWin(dev):
+    """Mount dev on /mnt/win"""
     try:
         os.mkdir("/mnt/win")
     except:
         pass
     cl = [
-        "mount",
+        "/usr/bin/mount",
         dev,
         "/mnt/win",
     ]
@@ -231,8 +236,9 @@ def mountWin(dev):
 
 
 def umountWin(dev):
+    """unmount dev"""
     cl = [
-        "umount",
+        "/usr/bin/umount",
         dev,
     ]
     process = subprocess.run(cl, capture_output=True, check=True)
@@ -240,8 +246,9 @@ def umountWin(dev):
 
 
 def getBackingFile(img):
+    """Run qemu-img info to find the backing file for the img (only designed to with one backing file)"""
     cl = [
-        "qemu-img",
+        "/usr/bin/qemu-img",
         "info",
         img,
     ]
@@ -253,6 +260,7 @@ def getBackingFile(img):
 
 
 def createSQLite(dev, dbpath):
+    """Create a SQLLite database from the dev using tsk_loaddb"""
     cl = [
         "/usr/bin/tsk_loaddb",
         "-d",
@@ -265,6 +273,7 @@ def createSQLite(dev, dbpath):
 
 
 def getParts(sconn):
+    """"Get parts from tsk_vs_parts"""
     # select  obj_id,addr,start,length,desc,flags from tsk_vs_parts
     cursor = sconn.cursor()
     rows = cursor.execute(
@@ -274,6 +283,7 @@ def getParts(sconn):
 
 
 def getStartupPart(sconn):
+    """Find the partition we need for mucking with startup"""
     cursor = sconn.cursor()
     rows = cursor.execute(
         "select distinct c.obj_id from tsk_files a, tsk_objects b, tsk_vs_parts c  where b.par_obj_id=c.obj_id and a.fs_obj_id=b.obj_id and a.parent_path like '/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup/' and a.dir_type=3"
@@ -282,6 +292,7 @@ def getStartupPart(sconn):
 
 
 def getPartNo(obj_id, parts):
+    """Get the dev number for the partion"""
     index = 0
     for p in parts:
         if obj_id == p[0]:
@@ -291,6 +302,7 @@ def getPartNo(obj_id, parts):
 
 
 def getMountDev(sconn, dev):
+    """Return the dev to mount for the windows partition"""
     parts = getParts(sconn)
     obj_id = getStartupPart(sconn)
     portno = getPartNo(obj_id, parts)
@@ -298,6 +310,7 @@ def getMountDev(sconn, dev):
 
 
 def disableUAC():
+    """Edit registry hive to disable UAC"""
     h = hivex.Hivex("/mnt/win/Windows/System32/config/SOFTWARE", write=True)
     key = h.root()
     key = h.node_get_child(key, "Microsoft")
@@ -313,6 +326,7 @@ def disableUAC():
 
 
 def copyFiles():
+    """Copy startup.exe to the startup folder"""
     shutil.copy(
         os.getcwd() + "/startup/startup.exe",
         "/mnt/win/ProgramData/Microsoft/Windows/Start Menu/Programs/Startup",
@@ -320,10 +334,11 @@ def copyFiles():
 
 
 def getStatus(domain, pid):
+    """Get the status of the command running in the guest"""
     status = {"execute": "guest-exec-status", "arguments": {"pid": pid}}
     result = subprocess.run(
         [
-            "virsh",
+            "/usr/bin/virsh",
             "-c",
             "qemu:///system",
             "qemu-agent-command",
@@ -338,6 +353,7 @@ def getStatus(domain, pid):
 
 
 def runCmd(domain, cmd, args):
+    """Run a command in the guest"""
     if len(args) == 0:
         args = []
     payload = {
@@ -347,7 +363,7 @@ def runCmd(domain, cmd, args):
 
     p = subprocess.run(
         [
-            "virsh",
+            "/usr/bin/virsh",
             "-c",
             "qemu:///system",
             "qemu-agent-command",
@@ -369,6 +385,7 @@ def runCmd(domain, cmd, args):
 
 
 def parseStdoutStderr(raw):
+    """Parse the stdout and stderr from the command run in the guest"""
     try:
         base64Out = base64.b64decode(raw["return"]["out-data"]).decode("UTF-8")
     except KeyError as e:
@@ -381,6 +398,7 @@ def parseStdoutStderr(raw):
 
 
 def createCustomizedImage(args, conn):
+    """Create a image for customization from the inputfile"""
     qcow2 = createStorage(args.inputfile, args.instancename, args.tmpdir)
 
     dbname = qcow2 + ".db"
@@ -494,6 +512,7 @@ def createCustomizedImage(args, conn):
 
 
 def launchSubInstance(name, conn):
+    """Launch an instance built from the customized image"""
     iname = findInstanceName(name, conn)
     print(iname)
     bf1 = name + ".qcow2"
