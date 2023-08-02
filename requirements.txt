@@ -20,6 +20,3 @@ filebeat-oss
 packetbeat-oss
 putty
 curl
-sysinternals
-openvpn
-wireguard
