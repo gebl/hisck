@@ -19,13 +19,16 @@ from tqdm import tqdm
 
 timestr = time.strftime("%Y%m%d")
 
+
 def handler(ctxt, err):
     global errno
 
-    #print("handler(%s, %s)" % (ctxt, err))
+    # print("handler(%s, %s)" % (ctxt, err))
     errno = err
 
-libvirt.registerErrorHandler(handler, 'context')
+
+libvirt.registerErrorHandler(handler, "context")
+
 
 def extractOVA(src, workpath):
     """
@@ -39,17 +42,23 @@ def extractOVA(src, workpath):
         with ZipFile(src) as myzip:
             if myzip.namelist()[0].endswith(".ova"):
                 ovaname = myzip.namelist()[0]
-                path=os.path.join(workpath, ovaname)
+                path = os.path.join(workpath, ovaname)
                 if not os.path.exists(path):
-                    zi=myzip.getinfo(ovaname)
-                    with open(path, 'wb') as of:
-                        with tqdm(desc=path,total=zi.file_size,unit="B",unit_scale=True,unit_divisor=1024,) as bar:
-                            with myzip.open(ovaname,'r') as inf:
+                    zi = myzip.getinfo(ovaname)
+                    with open(path, "wb") as of:
+                        with tqdm(
+                            desc=path,
+                            total=zi.file_size,
+                            unit="B",
+                            unit_scale=True,
+                            unit_divisor=1024,
+                        ) as bar:
+                            with myzip.open(ovaname, "r") as inf:
                                 while True:
                                     chunk = inf.read(1024)
                                     if not chunk:
                                         break
-                                    bar.update(len(chunk)) 
+                                    bar.update(len(chunk))
                                     of.write(chunk)
     except:
         pass
@@ -64,8 +73,8 @@ def extractVMDK(ova, workpath):
     4. If we didn't find any file ending with ".vmdk", raise an exception
     5. If the file isn't already on disk, extract it from the archive
     6. Return the name of the VMDK file"""
-    print("ova: "+ova)
-    print("workpath: "+workpath)
+    print("ova: " + ova)
+    print("workpath: " + workpath)
     vmdk = None
     with TarFile(os.path.join(workpath, ova)) as mytar:
         for n in mytar.getnames():
@@ -73,20 +82,40 @@ def extractVMDK(ova, workpath):
                 vmdk = n
         if vmdk is None:
             raise Exception("Couldn't find OVA")
-        path=os.path.join(workpath, vmdk)
+        path = os.path.join(workpath, vmdk)
         if not os.path.exists(path):
-            ti=mytar.getmember(vmdk)
-            with open(path, 'wb') as of:
-                with tqdm(desc=path,total=ti.size,unit="B",unit_scale=True,unit_divisor=1024,) as bar:
+            ti = mytar.getmember(vmdk)
+            with open(path, "wb") as of:
+                with tqdm(
+                    desc=path,
+                    total=ti.size,
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                ) as bar:
                     with mytar.extractfile(vmdk) as inf:
                         while True:
                             chunk = inf.read(1024)
                             if not chunk:
                                 break
-                            bar.update(len(chunk)) 
+                            bar.update(len(chunk))
                             of.write(chunk)
     return vmdk
 
+def snapshot(domain,name,desc):
+    process = subprocess.run(
+        [
+            "/usr/bin/virsh",
+            "snapshot-create-as",
+            "--domain",
+            domain,
+            "--name",
+            name,
+            "--description",
+            desc,
+            "--disk-only"
+        ]
+    )
 
 def createBaseInstanceQCOW2(qcow2, iname):
     """
@@ -121,10 +150,16 @@ def translateQCOW2(vmdk, tmpdir):
         1. Run the command "qemu-img convert -f vmdk -O qcow2 vmdk qcow2" in the terminal
     4. Return the string qcow2"""
     qcow2 = vmdk[:-5] + ".qcow2"
-    totalsize=os.path.getsize(os.path.join(tmpdir, vmdk))*2.5
+    totalsize = os.path.getsize(os.path.join(tmpdir, vmdk)) * 2.5
     if not os.path.exists(qcow2):
-        with tqdm(desc=qcow2,total=totalsize,unit="B",unit_scale=True,unit_divisor=1024,) as bar:
-            p=subprocess.Popen(
+        with tqdm(
+            desc=qcow2,
+            total=totalsize,
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+        ) as bar:
+            p = subprocess.Popen(
                 [
                     "/usr/bin/qemu-img",
                     "convert",
@@ -136,16 +171,18 @@ def translateQCOW2(vmdk, tmpdir):
                     qcow2,
                 ],
             )
-            last=0
+            last = 0
             while p.poll() is None:
                 try:
-                    now=os.path.getsize(qcow2)
+                    now = os.path.getsize(qcow2)
                 except:
-                    now=0
-                bar.update(now-last)
-                last=now
+                    now = 0
+                bar.update(now - last)
+                last = now
                 time.sleep(1)
-        bar.update((os.path.getsize(os.path.join(tmpdir, vmdk))*2.5)-os.path.getsize(qcow2))
+        bar.update(
+            (os.path.getsize(os.path.join(tmpdir, vmdk)) * 2.5) - os.path.getsize(qcow2)
+        )
     return qcow2
 
 
@@ -405,7 +442,7 @@ def qemuAgentCommand(
         jsonresult = json.loads(rawresult)
         data = jsonresult
     except Exception as e:
-        print(e.message)
+        #print(e)
         data = None
     return data
 
@@ -419,8 +456,14 @@ def copyFileGA(domain, fromPath, toPath):
         return
     handle = result["return"]
 
-    totalsize=os.path.getsize(fromPath)
-    with tqdm(desc="copy",total=totalsize,unit="B",unit_scale=True,unit_divisor=1024,) as bar:
+    totalsize = os.path.getsize(fromPath)
+    with tqdm(
+        desc=os.path.basename(fromPath),
+        total=totalsize,
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as bar:
         with open(fromPath, "rb") as f:
             while True:
                 data = f.read(1024 * 32)
@@ -438,6 +481,12 @@ def copyFileGA(domain, fromPath, toPath):
         status = {"execute": "guest-file-close", "arguments": {"handle": handle}}
         result = qemuAgentCommand(domain, json.dumps(status))
 
+def copyFilesGA(domain,fromPath,toPath):
+    if fromPath is None:
+        fromPath=os.path.join(os.getcwd(),"copy")
+    
+    for f in os.listdir(fromPath):
+        copyFileGA(domain,os.path.join(fromPath,f),toPath+f)
 
 def getStatus(domain, pid):
     """Get the status of the command running in the guest"""
@@ -466,21 +515,7 @@ def runCmd(domain, cmd, args):
         cmddone = out["return"]["exited"]
     return out
 
-
-def parseStdoutStderr(raw):
-    """Parse the stdout and stderr from the command run in the guest"""
-    try:
-        base64Out = base64.b64decode(raw["return"]["out-data"]).decode("UTF-8")
-    except KeyError as e:
-        base64Out = ""
-    try:
-        base64Err = base64.b64decode(raw["return"]["err-data"]).decode("UTF-8")
-    except KeyError as e:
-        base64Err = ""
-    return base64Out, base64Err
-
-
-def createCustomizedImage(f,tag,tmpdir,d, conn):
+def createCustomizedImage(f, tag, tmpdir, d, conn):
     """Create a image for customization from the inputfile"""
     dbname = f + ".db"
     if not os.path.exists(dbname):
@@ -508,6 +543,7 @@ def createCustomizedImage(f,tag,tmpdir,d, conn):
     disconnectNBD(d).decode("utf-8")
 
     dxl = defineXML(iname, [f], iqcow2)
+    #snapshot(iname,'initial','Initial Snapshot')
     print("Booting VM")
     dom = bootVM(dxl, conn)
 
@@ -538,7 +574,9 @@ def createCustomizedImage(f,tag,tmpdir,d, conn):
     print(result)
     print(base64.b64decode(result["return"]["out-data"]))
 
+    print("Shutting down...")
     dom.reboot()
+    
     result = None
     sys.stdout.write("Connecting to Guest")
     while result is None:
@@ -566,7 +604,8 @@ def createCustomizedImage(f,tag,tmpdir,d, conn):
     print("Shutting down...")
     while dom.isActive():
         time.sleep(5)
-
+    #snapshot(iname,"install","Software installed.")
+    
     dbname = iqcow2 + ".db"
     print(connectNBD(d, iqcow2).decode("utf-8"))
     print(runFdisk(d).decode("utf-8"))
@@ -584,63 +623,142 @@ def launchSubInstance(name, conn):
     print(iqcow2)
     bf2 = getBackingFile(bf1)
     dxl = defineXML(iname, [bf1, bf2], iqcow2)
+    #snapshot(dxl,"initial","Initial Snapshot")
     dom = bootVM(dxl, conn)
 
 
-def downloadUrl(url,dest):
-    size=int(requests.head(url).headers['Content-Length'])
-    
-    read=0
+def downloadUrl(url, dest):
+    size = int(requests.head(url).headers["Content-Length"])
+
+    read = 0
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
-        with open(dest, 'wb') as f:
-            with tqdm(desc=dest,total=size,unit="B",unit_scale=True,unit_divisor=1024,) as bar:
+        with open(dest, "wb") as f:
+            with tqdm(
+                desc=dest,
+                total=size,
+                unit="B",
+                unit_scale=True,
+                unit_divisor=1024,
+            ) as bar:
                 for chunk in r.iter_content(chunk_size=8192):
-                    bar.update(len(chunk)) 
+                    bar.update(len(chunk))
                     f.write(chunk)
 
-    #cl = ["/usr/bin/wget", "-N", winurl, "-P", "downloads"]
-    #process = subprocess.run(cl, capture_output=True, check=True)
-    #return process.stdout
+    # cl = ["/usr/bin/wget", "-N", winurl, "-P", "downloads"]
+    # process = subprocess.run(cl, capture_output=True, check=True)
+    # return process.stdout
+
 
 def downloadWinVm(winurl):
     req_headers = requests.head(winurl)
     winzip = req_headers.headers["Location"]
     winzipu = urlparse(winzip)
     dest = os.path.join("downloads", os.path.basename(winzipu.path))
-    print("Downloading: "+dest +" from "+req_headers.headers["Location"]+"...")
+    print("Downloading: " + dest + " from " + req_headers.headers["Location"] + "...")
     if not os.path.exists(dest):
-        downloadUrl(req_headers.headers["Location"],dest)
+        downloadUrl(req_headers.headers["Location"], dest)
         print("Download complete.")
     else:
         print("File already downloaded.")
+
 
 def downloadVirtio(virtiourl):
     req_headers = requests.head(virtiourl)
     virtiozip = req_headers.headers["Location"]
     req = requests.get(virtiourl)
-    soup = BeautifulSoup(req.content,features="lxml")
+    soup = BeautifulSoup(req.content, features="lxml")
     for a in soup.findAll("a"):
         if a["href"].endswith(".iso") and a["href"].startswith("virtio-win-"):
             dest = os.path.join("downloads", a["href"])
-            print("Downloading: "+dest+" from "+virtiozip + a["href"]+"...")
+            print("Downloading: " + dest + " from " + virtiozip + a["href"] + "...")
             if not os.path.exists(dest):
-                downloadUrl(virtiozip + a["href"],dest)
+                downloadUrl(virtiozip + a["href"], dest)
             else:
                 print("File already downloaded.")
 
-def CreateWinTemplateVM(tag,winevalzip,tmpdir,d,conn):
+
+def CreateWinTemplateVM(tag, winevalzip, tmpdir, d, conn):
     inputfile = os.path.join("downloads", os.path.basename(winevalzip))
-    f=createStorage(inputfile, tag, "workdir")
-    createCustomizedImage(f,tag,tmpdir,d, conn)
-                
+    f = createStorage(inputfile, tag, "workdir")
+    createCustomizedImage(f, tag, tmpdir, d, conn)
+
+
+def printDomainInfo(d):
+    print(d.name())
+    print(d.OSType())
+    print(d.hasCurrentSnapshot())
+    state, maxmem, mem, cpus, cput = d.info()
+    print("The state is " + str(state))
+    print("The max memory is " + str(maxmem))
+    print("The memory is " + str(mem))
+    print("The number of cpus is " + str(cpus))
+    print("The cpu time is " + str(cput))
+
+
+def dumpMemory(d, dname, fullpath):
+    cfname = os.path.join(fullpath, "core.dmp")
+    mfname = os.path.join(fullpath, "memory.dmp")
+    print("dumping...")
+    d.coreDump(cfname)
+    d.coreDumpWithFormat(
+        mfname, libvirt.VIR_DOMAIN_CORE_DUMP_FORMAT_RAW, libvirt.VIR_DUMP_MEMORY_ONLY
+    )
+    print("done.")
+    print(d.isActive())
+
+
+def screenShot(d, f, conn):
+    stream = conn.newStream()
+    imageType = d.screenshot(stream, 0)
+    print(imageType)
+    fileHandler = open(f, "wb")
+    streamBytes = stream.recv(262120)
+    while streamBytes != b"":
+        fileHandler.write(streamBytes)
+        streamBytes = stream.recv(262120)
+    fileHandler.close()
+    print("Screenshot saved as type: " + imageType)
+    stream.finish()
+
+def runPS1(d,ps1,type="-Command"):
+    if not type in ["-Command","-File"]:
+        return None
+    result = runCmd(
+        d,
+        "powershell.exe",
+        [
+            "-NoProfile",
+            "-InputFormat",
+            "None",
+            "-ExecutionPolicy",
+            "Bypass",
+            type,
+            ps1,
+        ],
+    )
+    if "return" in result:
+        if "out-data" in result["return"]:
+            return base64.b64decode(result["return"]["out-data"]).decode("utf-8")
+    return result
+
 def main():
-    commands=['downloadwineval','downloadvirtio','createwintemplate','createwininstance','copyfile','runps1']
+    commands = [
+        "downloadwineval",
+        "downloadvirtio",
+        "createwintemplate",
+        "createwininstance",
+        "copyfile",
+        "runps1cmd",
+        "runps1file",
+        "domaininfo",
+        "dumpmemory",
+        "screenshot",
+        "batchcopy"
+    ]
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=commands)
-    parser.add_argument(
-        "--file", type=str, help="zipfile for Dev VM", default=None
-    )
+    parser.add_argument("--file", type=str, help="zipfile for Dev VM", default=None)
     parser.add_argument(
         "--tag",
         type=str,
@@ -653,15 +771,14 @@ def main():
         help="url for windows download",
         default=None,
     )
-    
+
     parser.add_argument(
         "--winevalzip",
         type=str,
         help="url for windows download",
         default=None,
     )
-    
-    
+
     parser.add_argument(
         "--tmpdir", type=str, help="location for workfiles", default="workdir"
     )
@@ -677,7 +794,7 @@ def main():
         help="url for windows download",
         default="https://aka.ms/windev_VM_virtualbox",
     )
-    
+
     parser.add_argument(
         "--dev", type=str, help="location for workfiles", default="/dev/nbd0"
     )
@@ -702,37 +819,32 @@ def main():
     print(latest_file)
 
     match args.command:
-        case 'downloadwineval':
+        case "downloadwineval":
             downloadWinVm(args.winevalurl)
-        case 'downloadvirtio':
+        case "downloadvirtio":
             downloadVirtio(args.virtiourl)
-        case 'createwintemplate':
-            CreateWinTemplateVM(args.tag,args.winevalzip,args.tmpdir,args.dev,conn)
-        case 'createwininstance':
+        case "createwintemplate":
+            CreateWinTemplateVM(args.tag, args.winevalzip, args.tmpdir, args.dev, conn)
+        case "createwininstance":
             try:
                 conn.lookupByName(args.tag)
             except:
                 raise Exception("Template VM not found")
             launchSubInstance(args.tag, conn)
-        case 'copyfile':
+        case "copyfile":
             copyFileGA(conn.lookupByName(args.tag), args.fromPath, args.toPath)
-        case 'runps1':
-            result = runCmd(
-                conn.lookupByName(args.tag),
-                "powershell.exe",
-                [
-                    "-NoProfile",
-                    "-InputFormat",
-                    "None",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    args.cmd,
-                ],
-            )
-            print(result)
-            print(base64.b64decode(result["return"]["out-data"]).decode("utf-8"))
-
+        case "batchcopy":
+            copyFilesGA(conn.lookupByName(args.tag),args.fromPath,args.toPath)
+        case "runps1cmd":
+            runPS1(conn.lookupByName(args.tag),args.cmd,type="-Command")
+        case "runps1file":
+            runPS1(conn.lookupByName(args.tag),args.cmd,type="-File")
+        case "domaininfo":
+            printDomainInfo(conn.lookupByName(args.tag))
+        case "dumpmemory":
+            dumpMemory(conn.lookupByName(args.tag), args.tag, args.tmpdir)
+        case "screenshot":
+            screenShot(conn.lookupByName(args.tag), args.toPath, conn)
     conn.close()
 
 
