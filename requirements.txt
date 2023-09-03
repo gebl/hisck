@@ -12,11 +12,7 @@ googlechrome
 ublockorigin-chrome
 firefox
 sysinternals
-windows-sdk-10-version-1803-windbg
 wireshark
 zap
-winlogbeat-oss
-filebeat-oss
-packetbeat-oss
 putty
 curl
